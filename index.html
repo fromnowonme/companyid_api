@@ -5,7 +5,73 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>公司資料比對工具</title>
     <style>
-        /* 保留原有的 CSS 樣式 */
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .file-input {
+            margin-bottom: 20px;
+        }
+        #compareBtn {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #compareBtn:hover {
+            background-color: #45a049;
+        }
+        #result {
+            margin-top: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        #progressBar {
+            width: 100%;
+            background-color: #ddd;
+            display: none;
+        }
+        #progressBar div {
+            width: 0%;
+            height: 30px;
+            background-color: #4CAF50;
+            text-align: center;
+            line-height: 30px;
+            color: white;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -16,6 +82,7 @@
             <input type="file" id="inputFile" accept=".csv">
         </div>
         <button id="compareBtn">開始比對</button>
+        <div id="progressBar"><div></div></div>
         <div id="result"></div>
     </div>
 
@@ -40,10 +107,16 @@
 
         async function compareData(inputData) {
             const baseUrl = 'https://data.gcis.nat.gov.tw/od/data/api/9D17AE0D-09B5-4732-A8F4-81ADED04B679';
+            const progressBar = document.getElementById('progressBar');
+            const progressBarInner = progressBar.querySelector('div');
+            progressBar.style.display = 'block';
             
-            comparisonResult = await Promise.all(inputData.map(async (row, index) => {
-                if (index === 0) {
-                    return [...row, '核對結果'];
+            comparisonResult = [];
+            for (let i = 0; i < inputData.length; i++) {
+                const row = inputData[i];
+                if (i === 0) {
+                    comparisonResult.push([...row, '核對結果', 'API回傳公司名稱']);
+                    continue;
                 }
                 const id = row[0];  // 假設輸入數據的第一列是統一編號
                 const name = row[1]; // 假設輸入數據的第二列是公司名稱
@@ -52,37 +125,80 @@
                     const apiUrl = `${baseUrl}?$format=json&$filter=Business_Accounting_NO eq ${id}`;
                     const response = await fetch(apiUrl);
                     if (!response.ok) {
-                        throw new Error('API request failed');
+                        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
                     }
                     const data = await response.json();
                     
                     let result;
+                    let apiCompanyName = '';
                     if (data && data.length > 0) {
-                        const companyName = data[0].Company_Name;
-                        if (name === companyName) {
+                        apiCompanyName = data[0].Company_Name;
+                        if (name === apiCompanyName) {
                             result = 'ok';
                         } else {
-                            result = `不一致: ${companyName}`;
+                            result = '不一致';
                         }
                     } else {
                         result = '統編不存在';
                     }
-                    return [...row, result];
+                    comparisonResult.push([...row, result, apiCompanyName]);
                 } catch (error) {
                     console.error('Error fetching company data:', error);
-                    return [...row, '資料獲取錯誤'];
+                    comparisonResult.push([...row, `資料獲取錯誤: ${error.message}`, '']);
                 }
-            }));
 
+                // 更新進度條
+                const progress = ((i + 1) / inputData.length) * 100;
+                progressBarInner.style.width = `${progress}%`;
+                progressBarInner.textContent = `${Math.round(progress)}%`;
+
+                // 每處理 10 筆資料就更新一次顯示結果
+                if (i % 10 === 0 || i === inputData.length - 1) {
+                    displayResult(comparisonResult);
+                }
+            }
+
+            progressBar.style.display = 'none';
             displayResult(comparisonResult);
         }
 
         function displayResult(data) {
-            // 保留原有的顯示結果邏輯
+            const resultDiv = document.getElementById('result');
+            let html = '<h2>比對結果</h2>';
+            html += '<table><tr>';
+            
+            data[0].forEach(header => {
+                html += `<th>${header}</th>`;
+            });
+            html += '</tr>';
+            
+            for (let i = 1; i < data.length; i++) {
+                html += '<tr>';
+                data[i].forEach(cell => {
+                    html += `<td>${cell}</td>`;
+                });
+                html += '</tr>';
+            }
+            
+            html += '</table>';
+            html += '<br><button onclick="downloadCSV()">下載比對結果</button>';
+            
+            resultDiv.innerHTML = html;
         }
 
         function downloadCSV() {
-            // 保留原有的下載 CSV 邏輯
+            let csvContent = "data:text/csv;charset=utf-8,";
+            comparisonResult.forEach(row => {
+                csvContent += row.join(",") + "\n";
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "comparison_result.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
     </script>
 </body>
