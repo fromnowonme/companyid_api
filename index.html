@@ -76,7 +76,7 @@
             progressBar.style.display = 'flex';
             
             comparisonResult = [inputData[0].concat(['核對結果'])];
-            const batchSize = 5; // 每批處理的請求數
+            const batchSize = 4; // 每批處理的請求數
             const delayTime = 1000; // 每批之間的延遲時間（毫秒）
 
             for (let i = 1; i < inputData.length; i += batchSize) {
