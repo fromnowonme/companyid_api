@@ -105,6 +105,21 @@
             });
         });
 
+        function jsonpRequest(url, callback) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                const callbackName = 'jsonp_callback_' + Math.round(100000 * Math.random());
+                window[callbackName] = function(data) {
+                    delete window[callbackName];
+                    document.body.removeChild(script);
+                    resolve(data);
+                };
+                script.src = url + '&callback=' + callbackName;
+                script.onerror = reject;
+                document.body.appendChild(script);
+            });
+        }
+
         async function compareData(inputData) {
             const baseUrl = 'https://data.gcis.nat.gov.tw/od/data/api/9D17AE0D-09B5-4732-A8F4-81ADED04B679';
             const progressBar = document.getElementById('progressBar');
@@ -123,11 +138,7 @@
                 
                 try {
                     const apiUrl = `${baseUrl}?$format=json&$filter=Business_Accounting_NO eq ${id}`;
-                    const response = await fetch(apiUrl);
-                    if (!response.ok) {
-                        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
-                    }
-                    const data = await response.json();
+                    const data = await jsonpRequest(apiUrl);
                     
                     let result;
                     let apiCompanyName = '';
